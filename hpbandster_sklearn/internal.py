@@ -1,4 +1,4 @@
-from logging import DEBUG
+from logging import DEBUG, error
 from logging import INFO
 from logging import WARNING
 from time import time
@@ -23,15 +23,17 @@ from hpbandster.core.worker import Worker
 from hpbandster.optimizers import BOHB
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
+from sklearn.utils.validation import check_is_fitted
 
-import gc
-
-id_func = id
-
+from .booster_integration import (
+    is_catboost_model,
+    is_lightgbm_model_of_required_version,
+    is_xgboost_model,
+)
 
 # adapted from sklearn.model_selection._validation
 # the estimator is not cloned but deepcopied to take advantage of warm_start
-def cross_validate(
+def _cross_validate_with_warm_start(
     estimators,
     X,
     y=None,
@@ -254,7 +256,7 @@ def cross_validate(
             train_test_tuple[1],
             verbose,
             None,
-            fit_params,
+            fit_params[i] if isinstance(fit_params, list) else fit_params,
             return_train_score=return_train_score,
             return_times=True,
             return_n_test_samples=True,
@@ -347,7 +349,7 @@ class SklearnWorker(Worker):
             timeout=timeout,
         )
         self.min_budget = min_budget
-        self.base_estimator = clone(base_estimator)
+        self.base_estimator = base_estimator
         self.X = X
         self.y = y
         self.scoring = scoring
@@ -364,21 +366,56 @@ class SklearnWorker(Worker):
         self._prepare_estimator()
 
     def _prepare_estimator(self):
+        self.base_estimator = clone(self.base_estimator)
+
         try:
-            self.base_estimator.set_params(warm_start=True)
+            if not is_catboost_model(self.base_estimator):
+                self.base_estimator.set_params(warm_start=True)
         except:
             pass
 
+        try:
+            if not is_catboost_model(self.base_estimator):
+                self.base_estimator.set_params(n_jobs=1)
+            else:
+                self.base_estimator.set_params(thread_count=1)
+        except:
+            pass
+
+        def is_resource_in_estimator(estimator, resource_name):
+            if is_catboost_model(estimator) and resource_name == "n_estimators":
+                return True
+            return hasattr(estimator, resource_name)
+
         if not self.resource_name:
             for k, v in self.AUTO_BUDGET_PARAMS.items():
-                if hasattr(self.base_estimator, k):
+                if is_resource_in_estimator(self.base_estimator, k):
                     self.resource_name = k
                     self.resource_type = v
                     break
 
-        self.base_estimator.set_params(**{self.resource_name: self.resource_type(self.min_budget)})
+        self.base_estimator.set_params(
+            **{self.resource_name: self.resource_type(self.min_budget)}
+        )
 
         self.estimators = [clone(self.base_estimator) for i in range(self.cv_n_splits)]
+
+    def _get_booster_fit_params(self, estimator):
+        booster = estimator
+        fit_params = {}
+        try:
+            if is_catboost_model(estimator) and estimator.is_fitted():
+                booster = estimator
+                fit_params = {"init_model": booster}
+            elif is_lightgbm_model_of_required_version(estimator):
+                booster = estimator.booster_
+                fit_params = {"init_model": booster}
+            elif is_xgboost_model(estimator):
+                booster = estimator.get_booster()
+                fit_params = {"xgb_model": booster}
+        except:
+            pass
+        return fit_params
 
     def compute(self, config_id, config, budget, working_directory):
         def try_set_resource_param(estimator, resource, budget):
@@ -386,34 +423,46 @@ class SklearnWorker(Worker):
                 resource_type = self.resource_type
                 new_resource = resource_type(budget)
                 old_resource = estimator.get_params()[resource]
-                if new_resource <= old_resource:
-                    new_resource = old_resource
+                if new_resource < old_resource:
+                    estimator = clone(estimator)
                 estimator.set_params(**{resource: new_resource})
             except Exception as e:
                 print(e)
                 return None
-            return (resource, new_resource, resource_type(budget), budget)
+            return estimator, (resource, new_resource, resource_type(budget), budget)
 
         resources_set = False
-        for estimator in self.estimators:
+
+        fit_params = []
+
+        for i, estimator in enumerate(self.estimators):
+            booster_fit_params = self._get_booster_fit_params(estimator)
+            if is_catboost_model(estimator):
+                estimator = clone(estimator)
             estimator.set_params(**config)
 
-            resources_set = try_set_resource_param(
+            new_estimator, resources_set = try_set_resource_param(
                 estimator, self.resource_name, budget,
             )
+            if new_estimator is not estimator:
+                booster_fit_params = {}
+            self.estimators[i] = new_estimator
+            fit_params.append({**self.fit_params, **booster_fit_params})
 
-        ret, scores = cross_validate(
+        ret, scores = _cross_validate_with_warm_start(
             self.estimators,
             self.X,
             self.y,
             cv=self.cv,
             error_score=self.error_score,
-            fit_params=self.fit_params,
+            fit_params=fit_params,
             groups=self.groups,
             return_train_score=self.return_train_score,
             scoring=self.scoring,
-            return_estimator=False,
+            return_estimator=True,
         )
+
+        self.estimators = list(ret.pop("estimator"))
 
         test_score_mean = np.mean(ret[f"test_{self.metric}"])
         try:
@@ -435,6 +484,7 @@ class SklearnWorker(Worker):
             },
         }
 
-        result["info"]["cv"] = scores
+        # remove estimators
+        result["info"]["cv"] = [x[:-1] for x in scores]
 
         return result

@@ -4,6 +4,7 @@ from logging import WARNING
 import numbers
 import os
 import time
+import gc
 from collections import Counter
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Union
@@ -42,7 +43,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         verbose=0,
         pre_dispatch="2*n_jobs",
         random_state=None,
-        error_score=np.nan,
+        error_score="raise",
         return_train_score=False,
         local_port=9090,
         host="127.0.0.1",
@@ -97,7 +98,32 @@ class HpBandSterSearchCV(BaseSearchCV):
         results.insert(0, ("run", config_ids))
         return dict(results)
 
+    def _calculate_n_jobs_and_actual_iters(self):
+        # because HpBandSter assigns n_iter jobs to each worker, we need to divide
+        n_jobs = self.n_jobs
+        if not n_jobs:
+            n_jobs = 1
+        elif n_jobs < 0:
+            try:
+                import psutil
+
+                cpus = int(
+                    os.environ.get(
+                        "LOKY_MAX_CPU_COUNT", psutil.cpu_count(logical=False)
+                    )
+                )
+            except:
+                cpus = cpu_count()
+            n_jobs = max(cpus + 1 + n_jobs, 1)
+
+        if n_jobs > self.n_iter:
+            n_jobs = self.n_iter
+
+        actual_iterations = self.n_iter // n_jobs + (self.n_iter % n_jobs > 0)
+        return (n_jobs, actual_iterations)
+
     def fit(self, X, y, groups=None, **fit_params):
+        # sklearn prep
         cv = check_cv(self.cv, y, classifier=is_classifier(self.estimator))
 
         scorers, self.multimetric_ = _check_multimetric_scoring(
@@ -132,46 +158,26 @@ class HpBandSterSearchCV(BaseSearchCV):
 
         X, y, groups = indexable(X, y, groups)
         fit_params = _check_fit_params(X, fit_params)
-
         n_splits = cv.get_n_splits(X, y, groups)
-
         base_estimator = clone(self.estimator)
 
-        run_id = f"HpBandSterSearchCV_{time.time()}"
+        # this should never be necessary, but just in case
         try:
             self._nameserver.shutdown()
         except:
             pass
 
-        # because HpBandSter assigns n_iter jobs to each worker, we need to divide
-        n_jobs = self.n_jobs
-        if not n_jobs:
-            n_jobs = 1
-        elif n_jobs < 0:
-            try:
-                import psutil
-
-                cpus = int(
-                    os.environ.get(
-                        "LOKY_MAX_CPU_COUNT", psutil.cpu_count(logical=False)
-                    )
-                )
-            except:
-                cpus = cpu_count()
-            n_jobs = max(cpus + 1 + n_jobs, 1)
-
-        if n_jobs > self.n_iter:
-            n_jobs = self.n_iter
-
-        actual_iterations = self.n_iter // n_jobs + (self.n_iter % n_jobs > 0)
-        print(n_jobs, self.n_iter, actual_iterations)
+        n_jobs, actual_iterations = self._calculate_n_jobs_and_actual_iters()
 
         # default port is 9090, we must have one, this is how BOHB workers communicate (even locally)
+        run_id = f"HpBandSterSearchCV_{time.time()}"
         self._nameserver = hpns.NameServer(
             run_id=run_id, host=self._nameserver_host, port=self._nameserver_port
         )
+        gc.collect()
         with NameServerContext(self._nameserver):
             workers = []
+            # each worker is a separate thread
             for i in range(n_jobs):
                 # SklearnWorker clones the estimator
                 w = SklearnWorker(
@@ -195,6 +201,7 @@ class HpBandSterSearchCV(BaseSearchCV):
                 w.run(background=True)
                 workers.append(w)
 
+            # BOHB by default
             if not self.optimizer:
                 self.optimizer = BOHB(
                     configspace=self.param_distributions,
@@ -257,6 +264,8 @@ class HpBandSterSearchCV(BaseSearchCV):
                     self.best_index_
                 ]
             self.best_params_ = results["params"][self.best_index_]
+
+        gc.collect()
 
         if self.refit:
             # we clone again after setting params in case some
