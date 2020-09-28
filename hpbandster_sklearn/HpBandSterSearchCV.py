@@ -22,7 +22,7 @@ import hpbandster.core.result as hpres
 from hpbandster.optimizers import BOHB, RandomSearch
 from sklearn.utils.validation import _check_fit_params, indexable
 
-from .internal import SklearnWorker
+from .SklearnWorker import SklearnWorker
 from .context import NameServerContext, OptimizerContext
 
 
