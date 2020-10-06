@@ -7,13 +7,14 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 from joblib.parallel import Parallel, delayed
 
 import numpy as np
-from numpy.lib.arraysetops import isin
+from math import ceil
 
 from sklearn.base import is_classifier, clone
-from sklearn.utils import indexable
+from sklearn.utils import indexable, resample
 from sklearn.metrics._scorer import _check_multimetric_scoring, _MultimetricScorer
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_score, _aggregate_score_dicts
+from sklearn.utils.validation import check_is_fitted
 
 from copy import deepcopy
 
@@ -23,13 +24,40 @@ from hpbandster.core.worker import Worker
 from hpbandster.optimizers import BOHB
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
-from sklearn.utils.validation import check_is_fitted
 
 from .booster_integration import (
     is_catboost_model,
     is_lightgbm_model_of_required_version,
     is_xgboost_model,
 )
+
+# adapted from sklearn.model_selection._search_successive_halving
+class _SubsampleMetaSplitter:
+    """Splitter that subsamples a given fraction of the dataset"""
+
+    def __init__(self, *, base_cv, fraction, subsample_test, random_state):
+        self.base_cv = base_cv
+        self.fraction = fraction
+        self.subsample_test = subsample_test
+        self.random_state = random_state
+
+    def split(self, X, y, groups=None):
+        for train_idx, test_idx in self.base_cv.split(X, y, groups):
+            train_idx = resample(
+                train_idx,
+                replace=False,
+                random_state=self.random_state,
+                n_samples=int(ceil(self.fraction * train_idx.shape[0])),
+            )
+            if self.subsample_test:
+                test_idx = resample(
+                    test_idx,
+                    replace=False,
+                    random_state=self.random_state,
+                    n_samples=int(ceil(self.fraction * test_idx.shape[0])),
+                )
+            yield train_idx, test_idx
+
 
 # adapted from sklearn.model_selection._validation
 # the estimator is not cloned but deepcopied to take advantage of warm_start
@@ -306,16 +334,18 @@ class SklearnWorker(Worker):
         id=None,
         timeout=None,
         min_budget=0,
+        max_budget=1,
         scoring=None,
         metric="score",
         resource_name=None,
-        resource_type=float,
+        resource_type=None,
         cv=None,
         cv_n_splits=None,
         error_score=np.nan,
         fit_params=None,
         groups=None,
         return_train_score=False,
+        random_state=None,
     ):
         """
         
@@ -349,6 +379,7 @@ class SklearnWorker(Worker):
             timeout=timeout,
         )
         self.min_budget = min_budget
+        self.max_budget = max_budget
         self.base_estimator = base_estimator
         self.X = X
         self.y = y
@@ -362,17 +393,19 @@ class SklearnWorker(Worker):
         self.return_train_score = return_train_score
         self.resource_name = resource_name
         self.resource_type = resource_type
+        self.random_state = random_state
 
         self._prepare_estimator()
 
     def _prepare_estimator(self):
         self.base_estimator = clone(self.base_estimator)
 
-        try:
-            if not is_catboost_model(self.base_estimator):
-                self.base_estimator.set_params(warm_start=True)
-        except:
-            pass
+        if self.resource_name != "n_samples":
+            try:
+                if not is_catboost_model(self.base_estimator):
+                    self.base_estimator.set_params(warm_start=True)
+            except:
+                pass
 
         try:
             if not is_catboost_model(self.base_estimator):
@@ -393,10 +426,31 @@ class SklearnWorker(Worker):
                     self.resource_name = k
                     self.resource_type = v
                     break
+            if not self.resource_name:
+                self.resource_name = "n_samples"
+            else:
+                self.base_estimator.set_params(
+                    **{self.resource_name: self.resource_type(self.min_budget)}
+                )
 
-        self.base_estimator.set_params(
-            **{self.resource_name: self.resource_type(self.min_budget)}
-        )
+        if not self.resource_type:
+            if type(self.min_budget) not in (float, int):
+                raise TypeError(
+                    f"'min_budget' must be of type 'float' or 'int', got '{type(self.min_budget)}'."
+                )
+            if type(self.max_budget) not in (float, int):
+                raise TypeError(
+                    f"'max_budget' must be of type 'float' or 'int', got '{type(self.max_budget)}'."
+                )
+            if type(self.min_budget) is float or type(self.max_budget) is float:
+                self.resource_type = float
+            else:
+                self.resource_type = int
+
+        if self.resource_type not in (float, int):
+            raise ValueError(
+                f"'resource_type' must be 'float' or 'int', got '{self.resource_type}'."
+            )
 
         self.estimators = [clone(self.base_estimator) for i in range(self.cv_n_splits)]
 
@@ -427,11 +481,10 @@ class SklearnWorker(Worker):
                     estimator = clone(estimator)
                 estimator.set_params(**{resource: new_resource})
             except Exception as e:
-                print(e)
-                return None
+                return estimator, None
             return estimator, (resource, new_resource, resource_type(budget), budget)
 
-        resources_set = False
+        resources_set = (self.resource_name, None, None, budget)
 
         fit_params = []
 
@@ -440,20 +493,41 @@ class SklearnWorker(Worker):
             if is_catboost_model(estimator):
                 estimator = clone(estimator)
             estimator.set_params(**config)
-
-            new_estimator, resources_set = try_set_resource_param(
-                estimator, self.resource_name, budget,
-            )
-            if new_estimator is not estimator:
-                booster_fit_params = {}
-            self.estimators[i] = new_estimator
+            if self.resource_name != "n_samples":
+                new_estimator, resources_set = try_set_resource_param(
+                    estimator, self.resource_name, budget,
+                )
+                if new_estimator is not estimator:
+                    booster_fit_params = {}
+                self.estimators[i] = new_estimator
             fit_params.append({**self.fit_params, **booster_fit_params})
+
+        if self.resource_name == "n_samples":
+            subsample_fraction = (
+                budget
+                if self.resource_type == float
+                else self.resource_type(ceil(budget / self.X.shape[0]))
+            )
+            resources_set = (
+                "n_samples",
+                int(ceil(subsample_fraction * self.X.shape[0])),
+                self.resource_type(budget),
+                budget,
+            )
+            cv = _SubsampleMetaSplitter(
+                base_cv=self.cv,
+                fraction=subsample_fraction,
+                subsample_test=True,
+                random_state=self.random_state,
+            )
+        else:
+            cv = self.cv
 
         ret, scores = _cross_validate_with_warm_start(
             self.estimators,
             self.X,
             self.y,
-            cv=self.cv,
+            cv=cv,
             error_score=self.error_score,
             fit_params=fit_params,
             groups=self.groups,
@@ -486,5 +560,7 @@ class SklearnWorker(Worker):
 
         # remove estimators
         result["info"]["cv"] = [x[:-1] for x in scores]
+
+        self.logger.debug(result)
 
         return result

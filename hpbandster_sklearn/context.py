@@ -1,3 +1,6 @@
+from time import sleep
+
+
 class NameServerContext(object):
     def __init__(self, nameserver):
         self.nameserver = nameserver
@@ -6,7 +9,6 @@ class NameServerContext(object):
         self.nameserver.start()
 
     def __exit__(self, type, value, traceback):
-        print(f"Shutting down nameserver {self.nameserver}")
         self.nameserver.shutdown()
 
 
@@ -20,5 +22,4 @@ class OptimizerContext(object):
         return self.optimizer.run(*self.run_args, **self.run_kwargs)
 
     def __exit__(self, type, value, traceback):
-        print(f"Shutting down optimizer {self.optimizer}")
         self.optimizer.shutdown(shutdown_workers=True)

@@ -1,32 +1,43 @@
-from logging import DEBUG
-from logging import INFO
-from logging import WARNING
+import logging
 import numbers
 import os
 import time
 import gc
+from copy import deepcopy
 from collections import Counter
+from time import sleep
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 from joblib.parallel import cpu_count
 
 import numpy as np
 
-from sklearn.base import BaseEstimator, MetaEstimatorMixin, clone, is_classifier
+from sklearn.base import clone, is_classifier
 from sklearn.model_selection._search import BaseSearchCV
+from sklearn.utils import check_random_state
 from sklearn.model_selection._split import check_cv
 from sklearn.metrics._scorer import _check_multimetric_scoring
 
 import hpbandster.core.nameserver as hpns
-import hpbandster.core.result as hpres
-from hpbandster.optimizers import BOHB, RandomSearch
+from hpbandster.optimizers import BOHB, RandomSearch, HyperBand, H2BO
 from sklearn.utils.validation import _check_fit_params, indexable
 
 from .SklearnWorker import SklearnWorker
 from .context import NameServerContext, OptimizerContext
 
+_logger = logging.getLogger(__name__)
+_logger.addHandler(logging.StreamHandler())
+
 
 class HpBandSterSearchCV(BaseSearchCV):
+    _optimizer_dict = {
+        "bohb": BOHB,
+        "random": RandomSearch,
+        "randomsearch": RandomSearch,
+        "hyperband": HyperBand,
+        "h2bo": H2BO,
+    }
+
     def __init__(
         self,
         estimator,
@@ -35,13 +46,14 @@ class HpBandSterSearchCV(BaseSearchCV):
         n_iter=10,
         min_budget=10,
         max_budget=100,
+        optimizer="bohb",
+        resource_name=None,
+        resource_type=None,
         scoring=None,
         n_jobs=None,
-        iid="deprecated",
         refit=True,
         cv=None,
         verbose=0,
-        pre_dispatch="2*n_jobs",
         random_state=None,
         error_score="raise",
         return_train_score=False,
@@ -49,29 +61,38 @@ class HpBandSterSearchCV(BaseSearchCV):
         host="127.0.0.1",
         **kwargs,
     ):
+        if not isinstance(optimizer, (str, type)):
+            raise TypeError(
+                f"'optimizer' must be of type 'str' or 'type' (an Optimizer class), got '{type(optimizer)}."
+            )
+        elif isinstance(optimizer, str) and optimizer not in self._optimizer_dict:
+            raise ValueError(
+                f"'optimizer' must be one of: {', '.join(self._optimizer_dict.keys())}."
+            )
+
         self.param_distributions = param_distributions
         self.n_iter = n_iter
         self.min_budget = min_budget
         self.max_budget = max_budget
+        self.resource_name = resource_name
+        self.resource_type = resource_type
         self.random_state = random_state
-        self._nameserver = None
-        self.optimizer = None
-        self._res = None
-        self._nameserver_port = local_port
-        self._nameserver_host = host
+        self.optimizer = optimizer
+        self.nameserver_port = local_port
+        self.nameserver_host = host
         self.bohb_kwargs = kwargs
         super().__init__(
             estimator=estimator,
             scoring=scoring,
             n_jobs=n_jobs,
-            iid=iid,
             refit=refit,
             cv=cv,
             verbose=verbose,
-            pre_dispatch=pre_dispatch,
             error_score=error_score,
             return_train_score=return_train_score,
         )
+
+        self._res = None
 
     def _runs_to_results(self, runs, id2config, scorers, n_splits, n_resources):
         all_candidate_params = []
@@ -160,59 +181,83 @@ class HpBandSterSearchCV(BaseSearchCV):
         fit_params = _check_fit_params(X, fit_params)
         n_splits = cv.get_n_splits(X, y, groups)
         base_estimator = clone(self.estimator)
-
-        # this should never be necessary, but just in case
-        try:
-            self._nameserver.shutdown()
-        except:
-            pass
+        rng = check_random_state(self.random_state)
+        np.random.set_state(rng.get_state(legacy=True))
 
         n_jobs, actual_iterations = self._calculate_n_jobs_and_actual_iters()
 
         # default port is 9090, we must have one, this is how BOHB workers communicate (even locally)
         run_id = f"HpBandSterSearchCV_{time.time()}"
-        self._nameserver = hpns.NameServer(
-            run_id=run_id, host=self._nameserver_host, port=self._nameserver_port
+        _nameserver = hpns.NameServer(
+            run_id=run_id, host=self.nameserver_host, port=self.nameserver_port
         )
+
         gc.collect()
-        with NameServerContext(self._nameserver):
+
+        if self.verbose > 1:
+            _logger.setLevel(logging.DEBUG)
+        elif self.verbose > 0:
+            _logger.setLevel(logging.INFO)
+        else:
+            _logger.setLevel(logging.WARNING)
+
+        if "logger" in self.bohb_kwargs:
+            self.bohb_kwargs.pop("logger")
+
+        with NameServerContext(_nameserver):
             workers = []
             # each worker is a separate thread
             for i in range(n_jobs):
                 # SklearnWorker clones the estimator
                 w = SklearnWorker(
                     min_budget=self.min_budget,
+                    max_budget=self.max_budget,
                     base_estimator=self.estimator,
                     X=X,
                     y=y,
-                    cv=self.cv,
+                    cv=cv,
                     cv_n_splits=n_splits,
                     groups=groups,
                     scoring=scorers,
                     metric=refit_metric,
                     fit_params=fit_params,
-                    nameserver=self._nameserver_host,
-                    nameserver_port=self._nameserver_port,
+                    nameserver=self.nameserver_host,
+                    nameserver_port=self.nameserver_port,
                     run_id=run_id,
                     id=i,
                     return_train_score=self.return_train_score,
                     error_score=self.error_score,
+                    resource_name=self.resource_name,
+                    resource_type=self.resource_type,
+                    random_state=rng,
+                    logger=_logger,
                 )
                 w.run(background=True)
                 workers.append(w)
 
+            # sleep for a moment to make sure all workers are initialized
+            sleep(0.2)
+
             # BOHB by default
-            if not self.optimizer:
-                self.optimizer = BOHB(
+            if isinstance(self.optimizer, str):
+                optimizer = self._optimizer_dict[self.optimizer.lower()](
                     configspace=self.param_distributions,
                     run_id=run_id,
                     min_budget=self.min_budget,
                     max_budget=self.max_budget,
+                    logger=_logger,
                     **self.bohb_kwargs,
                 )
-            with OptimizerContext(
-                self.optimizer, n_iterations=actual_iterations,
-            ) as res:
+            else:
+                optimizer = self.optimizer(
+                    configspace=self.param_distributions,
+                    run_id=run_id,
+                    min_budget=self.min_budget,
+                    max_budget=self.max_budget,
+                    logger=_logger,
+                    **self.bohb_kwargs,
+                )
+            with OptimizerContext(optimizer, n_iterations=actual_iterations,) as res:
                 self._res = res
 
         id2config = self._res.get_id2config_mapping()
@@ -221,19 +266,19 @@ class HpBandSterSearchCV(BaseSearchCV):
         self.best_params_ = id2config[incumbent]["config"]
 
         resource_type = workers[0].resource_type
-        self.n_resources_ = [resource_type(x) for x in self.optimizer.budgets]
+        self.n_resources_ = [resource_type(x) for x in optimizer.budgets]
         self.min_resources_ = self.n_resources_[0]
         self.max_resources_ = self.n_resources_[-1]
 
-        print(
-            f"Best {refit_metric}: {self._res.get_runs_by_id(incumbent)[-1].info['test_score_mean']}"
+        _logger.info(
+            f"\nBest {refit_metric}: {self._res.get_runs_by_id(incumbent)[-1].info['test_score_mean']}"
         )
-        print("Best found configuration:", self.best_params_)
-        print(
+        _logger.info("Best found configuration:", self.best_params_)
+        _logger.info(
             f"A total of {len(id2config.keys())} unique configurations where sampled."
         )
-        print(f"A total of {len(runs_all)} runs where executed.")
-        print(
+        _logger.info(f"A total of {len(runs_all)} runs where executed.")
+        _logger.info(
             f"Total budget corresponds to {sum([r.budget for r in runs_all]) / self.max_budget} full function evaluations."
         )
 
