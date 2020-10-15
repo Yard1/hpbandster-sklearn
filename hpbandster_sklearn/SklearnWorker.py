@@ -428,21 +428,27 @@ class SklearnWorker(Worker):
                     break
             if not self.resource_name:
                 self.resource_name = "n_samples"
-            else:
-                self.base_estimator.set_params(
-                    **{self.resource_name: self.resource_type(self.min_budget)}
-                )
 
         if not self.resource_type:
-            if type(self.min_budget) not in (float, int):
+            if self.min_budget is not None and type(self.min_budget) not in (
+                float,
+                int,
+            ):
                 raise TypeError(
                     f"'min_budget' must be of type 'float' or 'int', got '{type(self.min_budget)}'."
                 )
-            if type(self.max_budget) not in (float, int):
+            if self.max_budget is not None and type(self.max_budget) not in (
+                float,
+                int,
+            ):
                 raise TypeError(
                     f"'max_budget' must be of type 'float' or 'int', got '{type(self.max_budget)}'."
                 )
-            if type(self.min_budget) is float or type(self.max_budget) is float:
+            if (
+                type(self.min_budget) is float
+                or type(self.max_budget) is float
+                or (self.min_budget == 0 and self.max_budget == 1)
+            ):
                 self.resource_type = float
             else:
                 self.resource_type = int
@@ -450,6 +456,45 @@ class SklearnWorker(Worker):
         if self.resource_type not in (float, int):
             raise ValueError(
                 f"'resource_type' must be 'float' or 'int', got '{self.resource_type}'."
+            )
+
+        if self.min_budget is None:
+            if self.resource_name == "n_samples":
+                self.min_budget = (
+                    self.cv_n_splits * len(np.unique(self.y)) * 2
+                    if is_classifier(self.base_estimator)
+                    else self.cv_n_splits * 2
+                )
+                if self.resource_type is float:
+                    self.min_budget = float(self.min_budget / self.X.shape[0])
+            elif self.resource_type is int:
+                self.min_budget = 10
+            else:
+                raise ValueError(
+                    "Couldn't automatically determine min_budget value. Please set min_budget explicitly."
+                )
+
+        if self.max_budget is None:
+            if self.resource_name == "n_samples":
+                if self.resource_type is float:
+                    self.max_budget = 1.0
+                else:
+                    self.max_budget = self.X.shape[0]
+            elif self.resource_type is int:
+                self.max_budget = 100
+            else:
+                raise ValueError(
+                    "Couldn't automatically determine max_budget value. Please set max_budget explicitly."
+                )
+
+        if self.max_budget < self.min_budget:
+            raise ValueError(
+                "max_budget {self.max_budget} is smaller than min_budget {self.min_budget}. Please set max_budget explicitly."
+            )
+
+        if self.resource_name != "n_samples":
+            self.base_estimator.set_params(
+                **{self.resource_name: self.resource_type(self.min_budget)}
             )
 
         self.estimators = [clone(self.base_estimator) for i in range(self.cv_n_splits)]

@@ -10,6 +10,7 @@ class NameServerContext(object):
 
     def __exit__(self, type, value, traceback):
         self.nameserver.shutdown()
+        sleep(0.2)
 
 
 class OptimizerContext(object):
@@ -23,3 +24,4 @@ class OptimizerContext(object):
 
     def __exit__(self, type, value, traceback):
         self.optimizer.shutdown(shutdown_workers=True)
+        sleep(0.2)
