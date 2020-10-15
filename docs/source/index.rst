@@ -86,7 +86,7 @@ Early stopping
 --------------
 
 As almost every search algorithm in ``HpBandSter`` leverages early
-stopping (tmostly through Successive Halving), the user can configure
+stopping (mostly through Successive Halving), the user can configure
 the resource and budget to be used through the arguments of
 ``HpBandSterSearchCV`` object.
 
