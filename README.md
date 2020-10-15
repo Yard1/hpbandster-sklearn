@@ -92,11 +92,17 @@ By default, the object will try to automatically determine the best resource, by
 - `'max_iter'`, if the model has that attribute and the `warm_start` attribute
 - `'n_samples'` - if the model doesn't support `warm_start`, the dataset samples will be used as the resource instead, meaing the model will be iteratively fitted on a bigger and bigger portion of the dataset.
 
-Furthermore, special support has been added for LightGBM, XGBoost and CatBoost.
+Furthermore, special support has been added for `LightGBM`, `XGBoost` and `CatBoost` `scikit-learn` estimators.
 
 ## Documentation
 
 To be added.
+
+## References
+
+- `HpBandSter` - https://github.com/automl/HpBandSter
+- `ConfigSpace` - https://github.com/automl/ConfigSpace
+- `scikit-learn` - http://scikit-learn.org/
 
 ## Author
 
@@ -104,4 +110,4 @@ Antoni Baum (Yard1)
 
 ## License
 
-MIT
+[MIT](https://github.com/Yard1/hpbandster-sklearn/blob/master/LICENSE)
