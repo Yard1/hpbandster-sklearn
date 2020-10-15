@@ -60,7 +60,7 @@ search = HpBandSterSearchCV(clf, param_distributions,random_state=0, n_jobs=1, n
 search.best_parameters_
 ```
 
-Please refer to documentation of this library, as well as to the documentation of [`HpBandSter`](https://automl.github.io/HpBandSter/build/html/index.html) and [`ConfigSpace`](https://automl.github.io/ConfigSpace/master/index.html) for more information.
+Please refer to the [documentation of this library](https://hpbandster-sklearn.readthedocs.io/en/latest/), as well as to the documentation of [`HpBandSter`](https://automl.github.io/HpBandSter/build/html/index.html) and [`ConfigSpace`](https://automl.github.io/ConfigSpace/master/index.html) for more information.
 
 ## Early stopping
 
@@ -96,7 +96,7 @@ Furthermore, special support has been added for `LightGBM`, `XGBoost` and `CatBo
 
 ## Documentation
 
-To be added.
+https://hpbandster-sklearn.readthedocs.io/en/latest/
 
 ## References
 
