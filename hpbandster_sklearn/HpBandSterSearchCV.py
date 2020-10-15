@@ -103,8 +103,8 @@ class HpBandSterSearchCV(BaseSearchCV):
         If ``None`` (default), the resource name will be automatically determined to be one of
         (in order):
 
-            * 'n_estimators' - if estimator posses that attribute and has ``warm_start`` function
-            * 'max_iter' - if estimator posses that attribute and has ``warm_start`` function
+            * 'n_estimators' - if estimator posses that attribute and has ``warm_start`` attribute
+            * 'max_iter' - if estimator posses that attribute and has ``warm_start`` attribute
             * 'n_samples' - the number/fraction of samples
 
         'n_estimators' will also be used for LightGBM, XGBoost and CatBoost estimators.
