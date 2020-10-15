@@ -1,6 +1,8 @@
 hpbandster-sklearn
 ==================
 
+.. contents:: Table of Contents
+
 ``hpbandster-sklearn`` is a Python library providing a
 ``scikit-learn`` wrapper - :py:class:`HpBandSterSearchCV <hpbandster_sklearn.HpBandSterSearchCV.HpBandSterSearchCV>` - for
 ``HpBandSter``, a hyper parameter tuning library.
