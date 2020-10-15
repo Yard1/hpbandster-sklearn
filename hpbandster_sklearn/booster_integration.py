@@ -1,3 +1,5 @@
+# Adapted from https://github.com/ray-project/tune-sklearn/blob/master/tune_sklearn/_detect_booster.py
+
 def has_xgboost():
     try:
         import xgboost

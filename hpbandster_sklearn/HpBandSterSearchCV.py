@@ -7,7 +7,6 @@ from copy import deepcopy
 from collections import Counter
 from time import sleep
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 from joblib.parallel import cpu_count
 
 import numpy as np
@@ -33,7 +32,8 @@ _logger.addHandler(logging.StreamHandler())
 
 
 class HpBandSterSearchCV(BaseSearchCV):
-    """Hyper parameter search using HpBandSter.
+    """
+    Hyper parameter search using HpBandSter.
 
     This class provides a scikit-learn compatible wrapper over
     HpBandSter, implementing the entire HpBandSter search process
@@ -44,7 +44,7 @@ class HpBandSterSearchCV(BaseSearchCV):
 
     Parameters
     ----------
-    estimator : estimator object.
+    estimator : estimator object
         This is assumed to implement the scikit-learn estimator interface.
         Either estimator needs to provide a ``score`` function,
         or ``scoring`` must be passed.
@@ -65,6 +65,12 @@ class HpBandSterSearchCV(BaseSearchCV):
             * 'random' or 'randomsearch' - ``RandomSearch``
             * 'hyperband' - ``HyperBand``
             * 'h2bo' - ``H2BO``
+
+    nameserver_host : str, default='127.0.0.1'
+        The hostname to use for the HpBandSter nameserver. Required even when ran locally.
+
+    nameserver_port : int, default=9090
+        The port to use for the HpBandSter nameserver. Required even when ran locally.
 
     min_budget : int or float, default=None
         The minimum budget (amount of resource) to consider. Must be bigger than 0.
@@ -108,12 +114,6 @@ class HpBandSterSearchCV(BaseSearchCV):
         (default), will try to automatically determine the type based on ``resource_name``,
         ``min_budget`` and ```max_budget```.
 
-    nameserver_host : str, default='127.0.0.1'
-        The hostname to use for the HpBandSter nameserver. Required even when ran locally.
-
-    nameserver_port : int, default=9090
-        The port to use for the HpBandSter nameserver. Required even when ran locally.
-
     cv : int, cross-validation generator or an iterable, default=5
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
@@ -136,7 +136,7 @@ class HpBandSterSearchCV(BaseSearchCV):
             deactivating shuffling (`shuffle=False`), or by setting the
             `cv`'s `random_state` parameter to an integer.
 
-    scoring : string, callable, or None, default=None
+    scoring : str, callable, or None, default=None
         A single string (see :ref:`scoring_parameter`) or a callable
         (see :ref:`scoring`) to evaluate the predictions on the test set.
         If None, the estimator's score method is used.
