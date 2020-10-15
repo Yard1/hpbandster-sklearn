@@ -37,10 +37,10 @@ class HpBandSterSearchCV(BaseSearchCV):
 
     This class provides a scikit-learn compatible wrapper over
     HpBandSter, implementing the entire HpBandSter search process
-    (Nameserver, Worker, Optimizer).
+    (:class:`Nameserver`, :class:`Worker`, :class:`Optimizer`).
 
     In addition to scikit-learn estimators, early stopping support is built in for
-    LightGBM, XGBoost and CatBoost estimators.
+    :class:`LightGBM`, :class:`XGBoost` and :class:`CatBoost` estimators.
 
     Parameters
     ----------
@@ -61,10 +61,10 @@ class HpBandSterSearchCV(BaseSearchCV):
         The HpBandSter optimizer to use. Can be either an Optimizer type (not object!), or one of the
         folowing strings representing a HpBandSter optimizer.
 
-            * 'bohb' - ``BOHB``
-            * 'random' or 'randomsearch' - ``RandomSearch``
-            * 'hyperband' - ``HyperBand``
-            * 'h2bo' - ``H2BO``
+            * 'bohb' - :class:`BOHB`
+            * 'random' or 'randomsearch' - :class:`RandomSearch`
+            * 'hyperband' - :class:`HyperBand`
+            * 'h2bo' - :class:`H2BO`
 
     nameserver_host : str, default='127.0.0.1'
         The hostname to use for the HpBandSter nameserver. Required even when ran locally.
@@ -76,10 +76,8 @@ class HpBandSterSearchCV(BaseSearchCV):
         The minimum budget (amount of resource) to consider. Must be bigger than 0.
         If ``None``, will be:
 
-            * ``n_splits * 2`` when ``resource_name='n_samples'`` for a regression
-               problem
-            * ``n_classes * n_splits * 2`` when ``resource_name='n_samples'`` for a
-               classification problem
+            * ``n_splits * 2`` when ``resource_name='n_samples'`` for a regression problem
+            * ``n_classes * n_splits * 2`` when ``resource_name='n_samples'`` for a classification problem
             * ``10`` when ``resource_name != 'n_samples'``
 
         If ``resource_name`` is or is determined to be ``n_samples``, an int will
@@ -107,10 +105,10 @@ class HpBandSterSearchCV(BaseSearchCV):
             * 'max_iter' - if estimator posses that attribute and has ``warm_start`` attribute
             * 'n_samples' - the number/fraction of samples
 
-        'n_estimators' will also be used for LightGBM, XGBoost and CatBoost estimators.
+        'n_estimators' will also be used for :class:`LightGBM`, :class:`XGBoost` and :class:`CatBoost` estimators.
 
     resource_type : type, default=None
-        Defines the Python type of resource - either ``int`` or ``float``. If ``None``,
+        Defines the Python type of resource - either :class:`int` or :class:`float`. If ``None``,
         (default), will try to automatically determine the type based on ``resource_name``,
         ``min_budget`` and ```max_budget```.
 
@@ -119,15 +117,12 @@ class HpBandSterSearchCV(BaseSearchCV):
         Possible inputs for cv are:
 
         - integer, to specify the number of folds in a `(Stratified)KFold`,
-        - :term:`CV splitter`,
+        - `CV splitter`,
         - An iterable yielding (train, test) splits as arrays of indices.
 
         For integer/None inputs, if the estimator is a classifier and ``y`` is
         either binary or multiclass, :class:`StratifiedKFold` is used. In all
         other cases, :class:`KFold` is used.
-
-        Refer :ref:`User Guide <cross_validation>` for the various
-        cross-validation strategies that can be used here.
 
         .. note::
             Due to implementation details, the folds produced by `cv` must be
@@ -137,8 +132,8 @@ class HpBandSterSearchCV(BaseSearchCV):
             `cv`'s `random_state` parameter to an integer.
 
     scoring : str, callable, or None, default=None
-        A single string (see :ref:`scoring_parameter`) or a callable
-        (see :ref:`scoring`) to evaluate the predictions on the test set.
+        A single string (see `scoring_parameter`) or a callable
+        (see `scoring`) to evaluate the predictions on the test set.
         If None, the estimator's score method is used.
 
     refit : bool, default=True
@@ -170,7 +165,6 @@ class HpBandSterSearchCV(BaseSearchCV):
         sampling from lists of possible values instead of scipy.stats
         distributions.
         Pass an int for reproducible output across multiple function calls.
-        See :term:`Glossary <random_state>`.
 
     n_jobs : int or None, default=None
         Number of workers to spawn. Each worker runs in a separate thread.

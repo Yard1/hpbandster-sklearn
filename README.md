@@ -1,12 +1,12 @@
 # hpbandster-sklearn
 
-`hpbandster-sklearn` is a Python library providing a [`scikit-learn`](http://scikit-learn.org/) wrapper - `HpBandSterSeachCV` - for [`HpBandSter`](https://github.com/automl/HpBandSter), a hyper parameter tuning library.
+`hpbandster-sklearn` is a Python library providing a [`scikit-learn`](http://scikit-learn.org/) wrapper - `HpBandSterSearchCV` - for [`HpBandSter`](https://github.com/automl/HpBandSter), a hyper parameter tuning library.
 
 ## Motivation
 
 `HpBandSter` implements several cutting-edge hyper parameter algorithms, including HyperBand and BOHB. They often outperform standard Random Search, finding best parameter combinations in less time.
 
-`HpBandSter` is powerful and configurable, but its usage is often unintuitive for beginners and necessitating a large amount of boilerplate code. In order to solve that issue, `HpBandSterSeachCV` was created as a drop-in replacement for `scikit-learn` hyper parameter searchers, following its well-known and popular API, making it possible to tune `scikit-learn` API estimators with minimal setup.
+`HpBandSter` is powerful and configurable, but its usage is often unintuitive for beginners and necessitating a large amount of boilerplate code. In order to solve that issue, `HpBandSterSearchCV` was created as a drop-in replacement for `scikit-learn` hyper parameter searchers, following its well-known and popular API, making it possible to tune `scikit-learn` API estimators with minimal setup.
 
 `HpBandSterSearchCV` API has been based on `scikit-learn`'s [`HalvingRandomSearchCV`](https://scikit-learn.org/dev/modules/generated/sklearn.model_selection.HalvingRandomSearchCV.html), implementing nearly all of the parameters it does.
 
