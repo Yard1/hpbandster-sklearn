@@ -8,14 +8,14 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="hpbandster-sklearn",
-    version="1.0.0",
+    version="1.0.1",
     author="Antoni Baum",
     author_email="antoni.baum@protonmail.com",
     description="A scikit-learn wrapper for HpBandSter hyper parameter search",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Yard1/hpbandster-sklearn",
-    py_modules=["hpbandster_sklearn", "tests"],
+    packages=setuptools.find_packages(include=['hpbandster_sklearn', 'hpbandster_sklearn.*']),
     install_requires=required,
     include_package_data=True,
     license="MIT",
