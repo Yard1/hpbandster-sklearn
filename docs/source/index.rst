@@ -52,7 +52,7 @@ Use it like any other ``scikit-learn`` hyper parameter searcher:
    param_distributions = {"max_depth": [2, 3, 4], "min_samples_split": list(range(2, 12))}
 
    search = HpBandSterSearchCV(clf, param_distributions,random_state=0, n_jobs=1, n_iter=10, verbose=1).fit(X, y)
-   search.best_parameters_
+   search.best_params_
 
 You can also use ``ConfigSpace.ConfigurationSpace`` objects instead of
 dicts (in fact, it is recommended)!
@@ -76,11 +76,15 @@ dicts (in fact, it is recommended)!
    param_distributions.add_hyperparameter(CSH.UniformIntegerHyperparameter("max_depth", 2, 4))
 
    search = HpBandSterSearchCV(clf, param_distributions,random_state=0, n_jobs=1, n_iter=10, verbose=1).fit(X, y)
-   search.best_parameters_
+   search.best_params_
 
 Please refer to documentation of this library, as well as to the
 documentation of ``HpBandSter`` and ``ConfigSpace`` for more
 information.
+
+Pipelines and ``TransformedTargetRegressor`` are also supported.
+Make sure to prefix the hyper parameter names accordingly should
+you use either (or both).
 
 Early stopping
 --------------
@@ -128,7 +132,7 @@ Furthermore, special support has been added for ``LightGBM``,
 Documentation
 -------------
 
-To be added.
+You are looking at it!
 
 References
 ----------

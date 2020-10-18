@@ -15,8 +15,8 @@ from sklearn.metrics._scorer import _check_multimetric_scoring, _MultimetricScor
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_score, _aggregate_score_dicts
 from sklearn.utils.validation import check_is_fitted
-
-from copy import deepcopy
+from sklearn.pipeline import Pipeline
+from sklearn.compose import TransformedTargetRegressor
 
 import hpbandster.core.nameserver as hpns
 import hpbandster.core.result as hpres
@@ -397,21 +397,70 @@ class SklearnWorker(Worker):
 
         self._prepare_estimator()
 
+    def _get_actual_estimator(self, estimator):
+        if isinstance(estimator, Pipeline):
+            estimator = estimator._final_estimator
+        if isinstance(estimator, TransformedTargetRegressor):
+            try:
+                estimator = estimator.regressor_
+            except:
+                estimator = estimator.regressor
+        return estimator
+
+    @property
+    def actual_base_estimator(self):
+        return self._get_actual_estimator(self.base_estimator)
+
+    @property
+    def actual_estimators(self):
+        return [self._get_actual_estimator(x) for x in self.estimators]
+
+    @property
+    def pipeline_estimator_name(self):
+        if isinstance(self.base_estimator, Pipeline):
+            return self.base_estimator.steps[-1][0]
+        return ""
+
+    @property
+    def pipeline_estimator_name_prefix(self):
+        prefix = self.pipeline_estimator_name
+        if prefix:
+            return f"{prefix}__"
+        return ""
+
+    @property
+    def actual_estimator_name_prefix(self):
+        estimator = self.base_estimator
+        prefix = []
+        if isinstance(estimator, Pipeline):
+            prefix.append(estimator.steps[-1][0])
+        if isinstance(estimator, TransformedTargetRegressor):
+            prefix.append("regressor")
+        if prefix:
+            return f"{'__'.join(prefix)}__"
+        return ""
+
     def _prepare_estimator(self):
         self.base_estimator = clone(self.base_estimator)
 
         if self.resource_name != "n_samples":
             try:
-                if not is_catboost_model(self.base_estimator):
-                    self.base_estimator.set_params(warm_start=True)
+                if not is_catboost_model(self.actual_base_estimator):
+                    self.base_estimator.set_params(
+                        **{f"{self.actual_estimator_name_prefix}warm_start": True}
+                    )
             except:
                 pass
 
         try:
-            if not is_catboost_model(self.base_estimator):
-                self.base_estimator.set_params(n_jobs=1)
+            if not is_catboost_model(self.actual_base_estimator):
+                self.base_estimator.set_params(
+                    **{f"{self.actual_estimator_name_prefix}n_jobs": 1}
+                )
             else:
-                self.base_estimator.set_params(thread_count=1)
+                self.base_estimator.set_params(
+                    **{f"{self.actual_estimator_name_prefix}thread_count": 1}
+                )
         except:
             pass
 
@@ -422,7 +471,7 @@ class SklearnWorker(Worker):
 
         if not self.resource_name:
             for k, v in self.AUTO_BUDGET_PARAMS.items():
-                if is_resource_in_estimator(self.base_estimator, k):
+                if is_resource_in_estimator(self.actual_base_estimator, k):
                     self.resource_name = k
                     self.resource_type = v
                     break
@@ -462,7 +511,7 @@ class SklearnWorker(Worker):
             if self.resource_name == "n_samples":
                 self.min_budget = (
                     self.cv_n_splits * len(np.unique(self.y)) * 2
-                    if is_classifier(self.base_estimator)
+                    if is_classifier(self.actual_base_estimator)
                     else self.cv_n_splits * 2
                 )
                 if self.resource_type is float:
@@ -494,24 +543,41 @@ class SklearnWorker(Worker):
 
         if self.resource_name != "n_samples":
             self.base_estimator.set_params(
-                **{self.resource_name: self.resource_type(self.min_budget)}
+                **{
+                    f"{self.actual_estimator_name_prefix}{self.resource_name}": self.resource_type(
+                        self.min_budget
+                    )
+                }
             )
 
         self.estimators = [clone(self.base_estimator) for i in range(self.cv_n_splits)]
 
     def _get_booster_fit_params(self, estimator):
         booster = estimator
+        if isinstance(estimator, Pipeline):
+            estimator = estimator._final_estimator
+        if isinstance(estimator, TransformedTargetRegressor):
+            try:
+                estimator = estimator.regressor_
+            except:
+                estimator = estimator.regressor
         fit_params = {}
         try:
             if is_catboost_model(estimator) and estimator.is_fitted():
                 booster = estimator
-                fit_params = {"init_model": booster}
+                fit_params = {
+                    f"{self.pipeline_estimator_name_prefix}init_model": booster
+                }
             elif is_lightgbm_model_of_required_version(estimator):
                 booster = estimator.booster_
-                fit_params = {"init_model": booster}
+                fit_params = {
+                    f"{self.pipeline_estimator_name_prefix}init_model": booster
+                }
             elif is_xgboost_model(estimator):
                 booster = estimator.get_booster()
-                fit_params = {"xgb_model": booster}
+                fit_params = {
+                    f"{self.pipeline_estimator_name_prefix}xgb_model": booster
+                }
         except:
             pass
         return fit_params
@@ -521,10 +587,14 @@ class SklearnWorker(Worker):
             try:
                 resource_type = self.resource_type
                 new_resource = resource_type(budget)
-                old_resource = estimator.get_params()[resource]
+                old_resource = estimator.get_params()[
+                    f"{self.actual_estimator_name_prefix}{resource}"
+                ]
                 if new_resource < old_resource:
                     estimator = clone(estimator)
-                estimator.set_params(**{resource: new_resource})
+                estimator.set_params(
+                    **{f"{self.actual_estimator_name_prefix}{resource}": new_resource}
+                )
             except Exception as e:
                 return estimator, None
             return estimator, (resource, new_resource, resource_type(budget), budget)
