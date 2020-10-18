@@ -472,7 +472,7 @@ class SklearnWorker(Worker):
         if not self.resource_name:
             for k, v in self.AUTO_BUDGET_PARAMS.items():
                 if is_resource_in_estimator(self.actual_base_estimator, k):
-                    self.resource_name = k
+                    self.resource_name = f"{self.actual_estimator_name_prefix}{k}"
                     self.resource_type = v
                     break
             if not self.resource_name:
@@ -543,11 +543,7 @@ class SklearnWorker(Worker):
 
         if self.resource_name != "n_samples":
             self.base_estimator.set_params(
-                **{
-                    f"{self.actual_estimator_name_prefix}{self.resource_name}": self.resource_type(
-                        self.min_budget
-                    )
-                }
+                **{self.resource_name: self.resource_type(self.min_budget)}
             )
 
         self.estimators = [clone(self.base_estimator) for i in range(self.cv_n_splits)]
@@ -587,14 +583,10 @@ class SklearnWorker(Worker):
             try:
                 resource_type = self.resource_type
                 new_resource = resource_type(budget)
-                old_resource = estimator.get_params()[
-                    f"{self.actual_estimator_name_prefix}{resource}"
-                ]
+                old_resource = estimator.get_params()[resource]
                 if new_resource < old_resource:
                     estimator = clone(estimator)
-                estimator.set_params(
-                    **{f"{self.actual_estimator_name_prefix}{resource}": new_resource}
-                )
+                estimator.set_params(**{resource: new_resource})
             except Exception as e:
                 return estimator, None
             return estimator, (resource, new_resource, resource_type(budget), budget)
@@ -638,6 +630,7 @@ class SklearnWorker(Worker):
         else:
             cv = self.cv
 
+        print(self.estimators[0].get_params())
         ret, scores = _cross_validate_with_warm_start(
             self.estimators,
             self.X,

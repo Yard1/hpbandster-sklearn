@@ -62,7 +62,7 @@ search.best_params_
 
 Please refer to the [documentation of this library](https://hpbandster-sklearn.readthedocs.io/en/latest/), as well as to the documentation of [`HpBandSter`](https://automl.github.io/HpBandSter/build/html/index.html) and [`ConfigSpace`](https://automl.github.io/ConfigSpace/master/index.html) for more information.
 
-Pipelines and `TransformedTargetRegressor` are also supported. Make sure to prefix the hyper parameter names accordingly should you use either (or both).
+Pipelines and `TransformedTargetRegressor` are also supported. Make sure to prefix the hyper parameter and resource names accordingly should you use either (or both) - for example, `final_estimator__n_estimators`. `n_samples` is not to be prefixed.
 
 ## Early stopping
 

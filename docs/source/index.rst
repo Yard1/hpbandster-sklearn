@@ -83,8 +83,9 @@ documentation of ``HpBandSter`` and ``ConfigSpace`` for more
 information.
 
 Pipelines and ``TransformedTargetRegressor`` are also supported.
-Make sure to prefix the hyper parameter names accordingly should
-you use either (or both).
+Make sure to prefix the hyper parameter and resource names accordingly
+should you use either (or both) - for example,
+``final_estimator__n_estimators``. ``n_samples`` is not to be prefixed.
 
 Early stopping
 --------------
