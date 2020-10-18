@@ -144,7 +144,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         attribute and permits using ``predict`` directly on this
         ``GridSearchCV`` instance.
 
-    error_score : 'raise' or numeric, default='raise'
+    error_score : 'raise' or numeric, default=np.nan
         Value to assign to the score if an error occurs in estimator fitting.
         If set to 'raise', the error is raised. If a numeric value is given,
         FitFailedWarning is raised. This parameter does not affect the refit
@@ -297,7 +297,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         cv=None,
         scoring=None,
         refit=True,
-        error_score="raise",
+        error_score=np.nan,
         return_train_score=False,
         random_state=None,
         n_jobs=None,
