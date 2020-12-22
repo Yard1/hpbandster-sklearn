@@ -310,12 +310,16 @@ def _cross_validate_with_warm_start(
     )
 
     zipped_scores = list(zip(*scores))
-    print(zipped_scores)
+    print(f"ZIPPED SCORES: {zipped_scores}")
     if return_train_score:
         train_scores = zipped_scores.pop(0)
         train_scores = _aggregate_score_dicts(train_scores)
     if return_estimator:
-        fitted_estimators = zipped_scores.pop()
+        # sklearn < 0.24 compatibility
+        if isinstance(zipped_scores[-1][0], bool):
+            fitted_estimators = zipped_scores.pop(len(zipped_scores)-2)
+        else:
+            fitted_estimators =  zipped_scores.pop()
 
     test_scores = zipped_scores[0]
     fit_times = zipped_scores[2]
