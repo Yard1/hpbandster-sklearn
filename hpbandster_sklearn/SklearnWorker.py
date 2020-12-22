@@ -13,7 +13,7 @@ from sklearn.base import is_classifier, clone
 from sklearn.utils import indexable, resample
 from sklearn.metrics._scorer import _check_multimetric_scoring, check_scoring
 from sklearn.model_selection._split import check_cv
-from sklearn.model_selection._validation import _fit_and_score, _aggregate_score_dicts
+from sklearn.model_selection._validation import _fit_and_score
 from sklearn.pipeline import Pipeline
 from sklearn.compose import TransformedTargetRegressor
 
@@ -56,6 +56,11 @@ class _SubsampleMetaSplitter:
                     n_samples=int(ceil(self.fraction * test_idx.shape[0])),
                 )
             yield train_idx, test_idx
+
+
+# adapted from sklearn.model_selection._validation
+def _aggregate_score_dicts(scores):
+    return {key: np.asarray([score[key] for score in scores]) for key in scores[0]}
 
 
 # adapted from sklearn.model_selection._validation
@@ -310,7 +315,7 @@ def _cross_validate_with_warm_start(
         train_scores = _aggregate_score_dicts(train_scores)
     if return_estimator:
         fitted_estimators = zipped_scores.pop()
-    
+
     test_scores = zipped_scores[0]
     fit_times = zipped_scores[2]
     score_times = zipped_scores[3]
