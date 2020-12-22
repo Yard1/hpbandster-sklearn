@@ -310,6 +310,7 @@ def _cross_validate_with_warm_start(
     )
 
     zipped_scores = list(zip(*scores))
+    print(zipped_scores)
     if return_train_score:
         train_scores = zipped_scores.pop(0)
         train_scores = _aggregate_score_dicts(train_scores)
