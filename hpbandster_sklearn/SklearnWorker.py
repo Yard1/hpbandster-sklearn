@@ -11,10 +11,9 @@ from math import ceil
 
 from sklearn.base import is_classifier, clone
 from sklearn.utils import indexable, resample
-from sklearn.metrics._scorer import _check_multimetric_scoring, _MultimetricScorer
+from sklearn.metrics._scorer import _check_multimetric_scoring, check_scoring
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_score, _aggregate_score_dicts
-from sklearn.utils.validation import check_is_fitted
 from sklearn.pipeline import Pipeline
 from sklearn.compose import TransformedTargetRegressor
 
@@ -267,13 +266,18 @@ def _cross_validate_with_warm_start(
     X, y, groups = indexable(X, y, groups)
 
     cv = check_cv(cv, y, classifier=is_classifier(estimators[0]))
-    try:
-        scorers = _check_multimetric_scoring(estimators[0], scoring=scoring)
-        # sklearn < 0.24.0 compatibility
-        if isinstance(scorers, tuple):
-            scorers = scorers[0]
-    except KeyError:
-        pass
+    if callable(scoring):
+        scorers = scoring
+    elif scoring is None or isinstance(scoring, str):
+        scorers = check_scoring(estimators[0], scoring)
+    else:
+        try:
+            scorers = _check_multimetric_scoring(estimators[0], scoring=scoring)
+            # sklearn < 0.24.0 compatibility
+            if isinstance(scorers, tuple):
+                scorers = scorers[0]
+        except KeyError:
+            pass
 
     # We clone the estimator to make sure that all the folds are
     # independent, and that it is pickle-able.
