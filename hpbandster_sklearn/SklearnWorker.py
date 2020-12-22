@@ -310,7 +310,10 @@ def _cross_validate_with_warm_start(
         train_scores = _aggregate_score_dicts(train_scores)
     if return_estimator:
         fitted_estimators = zipped_scores.pop()
-    test_scores, n_samples, fit_times, score_times = zipped_scores
+    
+    test_scores = zipped_scores[0]
+    fit_times = zipped_scores[2]
+    score_times = zipped_scores[3]
     test_scores = _aggregate_score_dicts(test_scores)
 
     ret = {}
