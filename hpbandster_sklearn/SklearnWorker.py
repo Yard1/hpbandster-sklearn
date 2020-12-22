@@ -13,7 +13,11 @@ from sklearn.base import is_classifier, clone
 from sklearn.utils import indexable, resample
 from sklearn.metrics._scorer import _check_multimetric_scoring, check_scoring
 from sklearn.model_selection._split import check_cv
-from sklearn.model_selection._validation import _fit_and_score
+from sklearn.model_selection._validation import (
+    _fit_and_score,
+    _aggregate_score_dicts,
+    _normalize_score_results,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.compose import TransformedTargetRegressor
 
@@ -56,11 +60,6 @@ class _SubsampleMetaSplitter:
                     n_samples=int(ceil(self.fraction * test_idx.shape[0])),
                 )
             yield train_idx, test_idx
-
-
-# adapted from sklearn.model_selection._validation
-def _aggregate_score_dicts(scores):
-    return {key: np.asarray([score[key] for score in scores]) for key in scores[0]}
 
 
 # adapted from sklearn.model_selection._validation
@@ -286,10 +285,9 @@ def _cross_validate_with_warm_start(
 
     # We clone the estimator to make sure that all the folds are
     # independent, and that it is pickle-able.
-    scores = []
 
     parallel = Parallel(n_jobs=n_jobs, verbose=verbose, pre_dispatch=pre_dispatch)
-    scores = parallel(
+    results_org = parallel(
         delayed(_fit_and_score)(
             estimators[i],
             X,
@@ -309,36 +307,26 @@ def _cross_validate_with_warm_start(
         for i, train_test_tuple in enumerate(cv.split(X, y, groups))
     )
 
-    zipped_scores = list(zip(*scores))
-    print(f"ZIPPED SCORES: {zipped_scores}")
-    if return_train_score:
-        train_scores = zipped_scores.pop(0)
-        train_scores = _aggregate_score_dicts(train_scores)
-    if return_estimator:
-        # sklearn < 0.24 compatibility
-        if isinstance(zipped_scores[-1][0], bool):
-            fitted_estimators = zipped_scores.pop(len(zipped_scores)-2)
-        else:
-            fitted_estimators =  zipped_scores.pop()
-
-    test_scores = zipped_scores[0]
-    fit_times = zipped_scores[2]
-    score_times = zipped_scores[3]
-    test_scores = _aggregate_score_dicts(test_scores)
+    results = _aggregate_score_dicts(results_org)
 
     ret = {}
-    ret["fit_time"] = np.array(fit_times)
-    ret["score_time"] = np.array(score_times)
+    ret["fit_time"] = results["fit_time"]
+    ret["score_time"] = results["score_time"]
 
     if return_estimator:
-        ret["estimator"] = fitted_estimators
+        ret["estimator"] = results["estimator"]
 
-    for name in scorers:
-        ret["test_%s" % name] = np.array(test_scores[name])
+    test_scores_dict = _normalize_score_results(results["test_scores"])
+    if return_train_score:
+        train_scores_dict = _normalize_score_results(results["train_scores"])
+
+    for name in test_scores_dict:
+        ret["test_%s" % name] = test_scores_dict[name]
         if return_train_score:
             key = "train_%s" % name
-            ret[key] = np.array(train_scores[name])
-    return (ret, scores)
+            ret[key] = train_scores_dict[name]
+
+    return (ret, results_org)
 
 
 class SklearnWorker(Worker):
@@ -690,7 +678,22 @@ class SklearnWorker(Worker):
         }
 
         # remove estimators
-        result["info"]["cv"] = [x[:-1] for x in scores]
+        def numpy_to_native(x):
+            try:
+                assert "numpy" in str(type(x))
+                return x.item()
+            except:
+                return x
+
+        def array_to_list(x):
+            if isinstance(x, np.ndarray):
+                return [numpy_to_native(y) for y in x]
+            return x
+
+        result["info"]["cv"] = [
+            {k: array_to_list(v) for k, v in score.items() if k != "estimator"}
+            for score in scores
+        ]
 
         self.logger.debug(result)
 

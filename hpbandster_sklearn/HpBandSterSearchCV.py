@@ -384,16 +384,27 @@ class HpBandSterSearchCV(BaseSearchCV):
             resources.append(run.info["resources"][1])
             iteration.append(n_resources.index(run.info["resources"][2]))
             config_ids.append(run.config_id[-1])
-
+        print(all_out)
         results = list(
-            self._format_results(
-                all_candidate_params, scorers, n_splits, all_out
-            ).items()
+            self._format_results(all_candidate_params, n_splits, all_out).items()
         )
         results.insert(0, ("n_resources", resources))
         results.insert(0, ("iter", iteration))
         results.insert(0, ("run", config_ids))
-        return dict(results)
+
+        # multimetric is determined here because in the case of a callable
+        # self.scoring the return type is only known after calling
+        first_test_score = all_out[0]["test_scores"]
+        self.multimetric_ = isinstance(first_test_score, dict)
+
+        refit_metric = None
+
+        # check refit_metric now for a callabe scorer that is multimetric
+        if callable(self.scoring) and self.multimetric_:
+            self._check_refit_for_multimetric(first_test_score)
+            refit_metric = self.refit
+
+        return dict(results), refit_metric
 
     def _calculate_n_jobs_and_actual_iters(self):
         # because HpBandSter assigns n_iter jobs to each worker, we need to divide
@@ -423,12 +434,11 @@ class HpBandSterSearchCV(BaseSearchCV):
         # sklearn prep
         cv = check_cv(self.cv, y, classifier=is_classifier(self.estimator))
         refit_metric = "score"
-        self.multimetric_ = False
 
         if callable(self.scoring):
-            scorers = {"score": self.scoring}
+            scorers = self.scoring
         elif self.scoring is None or isinstance(self.scoring, str):
-            scorers = {"score": check_scoring(self.estimator, self.scoring)}
+            scorers = check_scoring(self.estimator, self.scoring)
         else:
             scorers = _check_multimetric_scoring(self.estimator, self.scoring)
             # sklearn < 0.24.0 compatibility
@@ -437,7 +447,6 @@ class HpBandSterSearchCV(BaseSearchCV):
 
             self._check_refit_for_multimetric(scorers)
             refit_metric = self.refit
-            self.multimetric_ = True
 
         X, y, groups = indexable(X, y, groups)
         fit_params = _check_fit_params(X, fit_params)
@@ -538,9 +547,12 @@ class HpBandSterSearchCV(BaseSearchCV):
         self.max_resources_ = self.n_resources_[-1]
         self.resource_name_ = workers[0].resource_name
 
-        results = self._runs_to_results(
+        results, new_refit_metric = self._runs_to_results(
             runs_all, id2config, scorers, n_splits, self.n_resources_
         )
+
+        if new_refit_metric is not None:
+            refit_metric = new_refit_metric
 
         iter_counter = sorted(Counter(results["iter"]).items())
         self.n_candidates_ = [x[1] for x in iter_counter]
@@ -595,7 +607,8 @@ class HpBandSterSearchCV(BaseSearchCV):
             self.refit_time_ = refit_end_time - refit_start_time
 
         # Store the only scorer not as a dict for single metric evaluation
-        self.scorer_ = scorers if self.multimetric_ else scorers["score"]
+        self.scorer_ = scorers
+
         self.cv_results_ = results
         self.n_splits_ = n_splits
 

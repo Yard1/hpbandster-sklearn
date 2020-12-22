@@ -1,5 +1,5 @@
 numpy
-scikit-learn
+scikit-learn>=0.24.0
 hpbandster
 ConfigSpace
 joblib
