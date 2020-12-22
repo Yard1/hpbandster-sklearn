@@ -267,9 +267,9 @@ def _cross_validate_with_warm_start(
 
     cv = check_cv(cv, y, classifier=is_classifier(estimators[0]))
     if callable(scoring):
-        scorers = scoring
+        scorers = {"score": scoring}
     elif scoring is None or isinstance(scoring, str):
-        scorers = check_scoring(estimators[0], scoring)
+        scorers = {"score": check_scoring(estimators[0], scoring=scoring)}
     else:
         try:
             scorers = _check_multimetric_scoring(estimators[0], scoring=scoring)

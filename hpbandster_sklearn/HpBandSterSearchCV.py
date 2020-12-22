@@ -426,9 +426,9 @@ class HpBandSterSearchCV(BaseSearchCV):
         self.multimetric_ = False
 
         if callable(self.scoring):
-            scorers = self.scoring
+            scorers = {"score": self.scoring}
         elif self.scoring is None or isinstance(self.scoring, str):
-            scorers = check_scoring(self.estimator, self.scoring)
+            scorers = {"score": check_scoring(self.estimator, self.scoring)}
         else:
             scorers = _check_multimetric_scoring(self.estimator, self.scoring)
             # sklearn < 0.24.0 compatibility
