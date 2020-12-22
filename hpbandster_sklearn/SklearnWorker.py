@@ -267,7 +267,13 @@ def _cross_validate_with_warm_start(
     X, y, groups = indexable(X, y, groups)
 
     cv = check_cv(cv, y, classifier=is_classifier(estimators[0]))
-    scorers, _ = _check_multimetric_scoring(estimators[0], scoring=scoring)
+    try:
+        scorers = _check_multimetric_scoring(estimators[0], scoring=scoring)
+        # sklearn < 0.24.0 compatibility
+        if isinstance(scorers, tuple):
+            scorers = scorers[0]
+    except KeyError:
+        pass
 
     # We clone the estimator to make sure that all the folds are
     # independent, and that it is pickle-able.
