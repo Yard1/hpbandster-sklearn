@@ -15,11 +15,11 @@ from sklearn.base import clone, is_classifier
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.utils import check_random_state
 from sklearn.model_selection._split import check_cv
-from sklearn.metrics._scorer import _check_multimetric_scoring
+from sklearn.metrics._scorer import _check_multimetric_scoring, check_scoring
+from sklearn.utils.validation import _check_fit_params, indexable
 
 import hpbandster.core.nameserver as hpns
 from hpbandster.optimizers import BOHB, RandomSearch, HyperBand, H2BO
-from sklearn.utils.validation import _check_fit_params, indexable
 
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
@@ -422,36 +422,22 @@ class HpBandSterSearchCV(BaseSearchCV):
     def fit(self, X, y, groups=None, **fit_params):
         # sklearn prep
         cv = check_cv(self.cv, y, classifier=is_classifier(self.estimator))
+        refit_metric = "score"
+        self.multimetric_ = False
 
-        scorers, self.multimetric_ = _check_multimetric_scoring(
-            self.estimator, scoring=self.scoring
-        )
-
-        if self.multimetric_:
-            if (
-                self.refit is not False
-                and (
-                    not isinstance(self.refit, str)
-                    or
-                    # This will work for both dict / list (tuple)
-                    self.refit not in scorers
-                )
-                and not callable(self.refit)
-            ):
-                raise ValueError(
-                    "For multi-metric scoring, the parameter "
-                    "refit must be set to a scorer key or a "
-                    "callable to refit an estimator with the "
-                    "best parameter setting on the whole "
-                    "data and make the best_* attributes "
-                    "available for that metric. If this is "
-                    "not needed, refit should be set to "
-                    "False explicitly. %r was passed." % self.refit
-                )
-            else:
-                refit_metric = self.refit
+        if callable(self.scoring):
+            scorers = self.scoring
+        elif self.scoring is None or isinstance(self.scoring, str):
+            scorers = check_scoring(self.estimator, self.scoring)
         else:
-            refit_metric = "score"
+            scorers = _check_multimetric_scoring(self.estimator, self.scoring)
+            # sklearn < 0.24.0 compatibility
+            if isinstance(scorers, tuple):
+                scorers = scorers[0]
+
+            self._check_refit_for_multimetric(scorers)
+            refit_metric = self.refit
+            self.multimetric_ = True
 
         X, y, groups = indexable(X, y, groups)
         fit_params = _check_fit_params(X, fit_params)
