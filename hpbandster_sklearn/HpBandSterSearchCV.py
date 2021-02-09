@@ -459,7 +459,25 @@ class HpBandSterSearchCV(BaseSearchCV):
         base_estimator = clone(self.estimator)
         rng = check_random_state(self.random_state)
         np.random.set_state(rng.get_state(legacy=True))
-        param_distributions = deepcopy(self.param_distributions)
+        if (
+            self.resource_name
+            not in self.param_distributions.get_hyperparameter_names()
+        ):
+            param_distributions = deepcopy(self.param_distributions)
+        else:
+            _logger.warning(
+                f"Found hyperparameter with name '{self.resource_name}', same as resource_name. Removing it from ConfigurationSpace."
+            )
+            param_distributions = CS.ConfigurationSpace(
+                name=self.param_distributions.name, meta=self.param_distributions.meta
+            )
+            param_distributions.add_hyperparameters(
+                [
+                    x
+                    for x in self.param_distributions.get_hyperparameters()
+                    if x.name != self.resource_name
+                ]
+            )
         param_distributions.seed = rng.get_state(legacy=True)[1][0]
 
         n_jobs, actual_iterations = self._calculate_n_jobs_and_actual_iters()
