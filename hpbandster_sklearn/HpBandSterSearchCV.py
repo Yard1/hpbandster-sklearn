@@ -314,23 +314,17 @@ class HpBandSterSearchCV(BaseSearchCV):
                 f"'optimizer' must be one of: {', '.join(self._optimizer_dict.keys())}."
             )
 
-        if min_budget is not None and max_budget is None:
-            raise ValueError(
-                "When defining max_budget, min_budget must also be defined."
-            )
-
-        if min_budget is None and max_budget is not None:
-            raise ValueError(
-                "When defining min_budget, max_budget must also be defined."
-            )
-
         if min_budget is not None and min_budget < 0:
             raise ValueError(f"min_budget cannot be negative. Got {min_budget}.")
 
         if max_budget is not None and max_budget < 0:
             raise ValueError(f"max_budget cannot be negative. Got {min_budget}.")
 
-        if max_budget is not None and max_budget <= min_budget:
+        if (
+            max_budget is not None
+            and min_budget is not None
+            and max_budget <= min_budget
+        ):
             raise ValueError(
                 f"max_budget {max_budget} must be bigger than min_budget {min_budget}."
             )
