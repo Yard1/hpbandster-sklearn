@@ -138,7 +138,8 @@ class HpBandSterSearchCV(BaseSearchCV):
 
     refit : bool, default=True
         If True, refit an estimator using the best found parameters on the
-        whole dataset.
+        whole dataset. The estimator will be refit with the maximum amount of
+        the resource.
 
         The refitted estimator is made available at the ``best_estimator_``
         attribute and permits using ``predict`` directly on this
@@ -313,6 +314,16 @@ class HpBandSterSearchCV(BaseSearchCV):
                 f"'optimizer' must be one of: {', '.join(self._optimizer_dict.keys())}."
             )
 
+        if min_budget is not None and max_budget is None:
+            raise ValueError(
+                "When defining max_budget, min_budget must also be defined."
+            )
+
+        if min_budget is None and max_budget is not None:
+            raise ValueError(
+                "When defining min_budget, max_budget must also be defined."
+            )
+
         if min_budget is not None and min_budget < 0:
             raise ValueError(f"min_budget cannot be negative. Got {min_budget}.")
 
@@ -454,8 +465,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         base_estimator = clone(self.estimator)
         rng = check_random_state(self.random_state)
         np.random.set_state(rng.get_state(legacy=True))
-        param_distributions = deepcopy(self.param_distributions)
-        param_distributions.seed = rng.get_state(legacy=True)[1][0]
+        np_random_seed = rng.get_state(legacy=True)[1][0]
 
         n_jobs, actual_iterations = self._calculate_n_jobs_and_actual_iters()
 
@@ -510,6 +520,29 @@ class HpBandSterSearchCV(BaseSearchCV):
 
             converted_min_budget = float(workers[0].min_budget)
             converted_max_budget = float(workers[0].max_budget)
+            self.resource_name_ = workers[0].resource_name
+
+            if (
+                self.resource_name_
+                in self.param_distributions.get_hyperparameter_names()
+            ):
+                _logger.warning(
+                    f"Found hyperparameter with name '{self.resource_name_}', same as resource_name_. Removing it from ConfigurationSpace."
+                )
+                param_distributions = CS.ConfigurationSpace(
+                    name=self.param_distributions.name,
+                    meta=self.param_distributions.meta,
+                )
+                param_distributions.add_hyperparameters(
+                    [
+                        x
+                        for x in self.param_distributions.get_hyperparameters()
+                        if x.name != self.resource_name_
+                    ]
+                )
+            else:
+                param_distributions = deepcopy(self.param_distributions)
+            param_distributions.seed = np_random_seed
 
             # sleep for a moment to make sure all workers are initialized
             sleep(0.2)
@@ -545,7 +578,6 @@ class HpBandSterSearchCV(BaseSearchCV):
         self.n_resources_ = [resource_type(x) for x in optimizer.budgets]
         self.min_resources_ = self.n_resources_[0]
         self.max_resources_ = self.n_resources_[-1]
-        self.resource_name_ = workers[0].resource_name
 
         results, new_refit_metric = self._runs_to_results(
             runs_all, id2config, scorers, n_splits, self.n_resources_
@@ -595,8 +627,11 @@ class HpBandSterSearchCV(BaseSearchCV):
         if self.refit:
             # we clone again after setting params in case some
             # of the params are estimators as well.
+            refit_params = self.best_params_.copy()
+            if self.resource_name_ != "n_samples":
+                refit_params[self.resource_name_] = self.max_resources_
             self.best_estimator_ = clone(
-                clone(base_estimator).set_params(**self.best_params_)
+                clone(base_estimator).set_params(**refit_params)
             )
             refit_start_time = time.time()
             if y is not None:

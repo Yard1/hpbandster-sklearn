@@ -8,7 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="hpbandster-sklearn",
-    version="2.0.0",
+    version="2.0.1",
     author="Antoni Baum",
     author_email="antoni.baum@protonmail.com",
     description="A scikit-learn wrapper for HpBandSter hyper parameter search",
