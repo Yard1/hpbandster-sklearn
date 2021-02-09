@@ -138,7 +138,8 @@ class HpBandSterSearchCV(BaseSearchCV):
 
     refit : bool, default=True
         If True, refit an estimator using the best found parameters on the
-        whole dataset.
+        whole dataset. The estimator will be refit with the maximum amount of
+        the resource.
 
         The refitted estimator is made available at the ``best_estimator_``
         attribute and permits using ``predict`` directly on this
@@ -311,6 +312,16 @@ class HpBandSterSearchCV(BaseSearchCV):
         elif isinstance(optimizer, str) and optimizer not in self._optimizer_dict:
             raise ValueError(
                 f"'optimizer' must be one of: {', '.join(self._optimizer_dict.keys())}."
+            )
+
+        if min_budget is not None and max_budget is None:
+            raise ValueError(
+                "When defining max_budget, min_budget must also be defined."
+            )
+
+        if min_budget is None and max_budget is not None:
+            raise ValueError(
+                "When defining min_budget, max_budget must also be defined."
             )
 
         if min_budget is not None and min_budget < 0:
@@ -516,18 +527,22 @@ class HpBandSterSearchCV(BaseSearchCV):
             converted_max_budget = float(workers[0].max_budget)
             self.resource_name_ = workers[0].resource_name
 
-            if self.resource_name_ in self.param_distributions.get_hyperparameter_names():
+            if (
+                self.resource_name_
+                in self.param_distributions.get_hyperparameter_names()
+            ):
                 _logger.warning(
-                    f"Found hyperparameter with name '{self.resource_name_}', same as resource_name. Removing it from ConfigurationSpace."
+                    f"Found hyperparameter with name '{self.resource_name_}', same as resource_name_. Removing it from ConfigurationSpace."
                 )
                 param_distributions = CS.ConfigurationSpace(
-                    name=self.param_distributions.name, meta=self.param_distributions.meta
+                    name=self.param_distributions.name,
+                    meta=self.param_distributions.meta,
                 )
                 param_distributions.add_hyperparameters(
                     [
                         x
                         for x in self.param_distributions.get_hyperparameters()
-                        if x.name != self.resource_name
+                        if x.name != self.resource_name_
                     ]
                 )
             else:
@@ -614,8 +629,11 @@ class HpBandSterSearchCV(BaseSearchCV):
         if self.refit:
             # we clone again after setting params in case some
             # of the params are estimators as well.
+            refit_params = self.best_params_.copy()
+            if self.resource_name_ != "n_samples":
+                refit_params[self.resource_name_] = self.max_resources_
             self.best_estimator_ = clone(
-                clone(base_estimator).set_params(**self.best_params_)
+                clone(base_estimator).set_params(**refit_params)
             )
             refit_start_time = time.time()
             if y is not None:
