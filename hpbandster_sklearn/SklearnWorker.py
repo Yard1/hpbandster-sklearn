@@ -630,7 +630,7 @@ class SklearnWorker(Worker):
         else:
             cv = self.cv
 
-        print(self.estimators[0].get_params())
+        #print(self.estimators[0].get_params())
         ret, scores = _cross_validate_with_warm_start(
             self.estimators,
             self.X,
