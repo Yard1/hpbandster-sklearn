@@ -24,7 +24,7 @@ from hpbandster.optimizers import BOHB, RandomSearch, HyperBand, H2BO
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
 
-from .SklearnWorker import SklearnWorker
+from .sklearn_worker import SklearnWorker
 from .context import NameServerContext, OptimizerContext
 
 _logger = logging.getLogger(__name__)
