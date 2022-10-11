@@ -503,7 +503,7 @@ class HpBandSterSearchCV(BaseSearchCV):
                     cv_n_splits=n_splits,
                     groups=groups,
                     scoring=scorers,
-                    warm_start = self.warm_start
+                    warm_start=self.warm_start,
                     metric=refit_metric,
                     fit_params=fit_params,
                     nameserver=self.nameserver_host,
