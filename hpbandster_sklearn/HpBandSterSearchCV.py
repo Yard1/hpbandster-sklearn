@@ -135,6 +135,11 @@ class HpBandSterSearchCV(BaseSearchCV):
         A single string (see `scoring_parameter`) or a callable
         (see `scoring`) to evaluate the predictions on the test set.
         If None, the estimator's score method is used.
+    
+    warm_start : bool, default=True
+        if estimator has attribute of 'warm_start' and 'warm_start'=True,
+        the fitting process will reuse the solution of the previous call to fit
+        otherwise just fit a whole estimator.
 
     refit : bool, default=True
         If True, refit an estimator using the best found parameters on the
@@ -297,6 +302,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         resource_type=None,
         cv=None,
         scoring=None,
+        warm_start=True,
         refit=True,
         error_score=np.nan,
         return_train_score=False,
@@ -334,6 +340,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         self.max_budget = max_budget
         self.resource_name = resource_name
         self.resource_type = resource_type
+        self.warm_start = warm_start
         self.random_state = random_state
         self.optimizer = optimizer
         self.nameserver_port = nameserver_port
@@ -496,6 +503,7 @@ class HpBandSterSearchCV(BaseSearchCV):
                     cv_n_splits=n_splits,
                     groups=groups,
                     scoring=scorers,
+                    warm_start=self.warm_start,
                     metric=refit_metric,
                     fit_params=fit_params,
                     nameserver=self.nameserver_host,
