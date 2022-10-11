@@ -631,7 +631,7 @@ class HpBandSterSearchCV(BaseSearchCV):
             # of the params are estimators as well.
             refit_params = self.best_params_.copy()
             if self.resource_name_ != "n_samples":
-                refit_params[self.resource_name_] = self.max_resources_
+                refit_params[self.resource_name_] = results['n_resources'][self.best_index_]
             self.best_estimator_ = clone(
                 clone(base_estimator).set_params(**refit_params)
             )
