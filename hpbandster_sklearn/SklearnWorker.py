@@ -347,6 +347,7 @@ class SklearnWorker(Worker):
         min_budget=0,
         max_budget=1,
         scoring=None,
+        warm_start=True,
         metric="score",
         resource_name=None,
         resource_type=None,
@@ -395,6 +396,7 @@ class SklearnWorker(Worker):
         self.X = X
         self.y = y
         self.scoring = scoring
+        self.warm_start = warm_start
         self.metric = metric
         self.cv = cv
         self.cv_n_splits = cv_n_splits
@@ -458,7 +460,7 @@ class SklearnWorker(Worker):
             try:
                 if not is_catboost_model(self.actual_base_estimator):
                     self.base_estimator.set_params(
-                        **{f"{self.actual_estimator_name_prefix}warm_start": True}
+                        **{f"{self.actual_estimator_name_prefix}warm_start": self.warm_start}
                     )
             except:
                 pass
