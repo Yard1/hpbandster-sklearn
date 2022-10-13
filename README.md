@@ -96,6 +96,87 @@ By default, the object will try to automatically determine the best resource, by
 
 Furthermore, special support has been added for `LightGBM`, `XGBoost` and `CatBoost` `scikit-learn` estimators.
 
+## Toolkit testing
+
+```python
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Oct  9 21:43:41 2022
+
+@author: poetair
+"""
+import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.ensemble import RandomForestClassifier
+from hpbandster_sklearn import HpBandSterSearchCV
+from sklearn.model_selection import KFold, cross_val_score
+
+import ConfigSpace as CS
+import ConfigSpace.hyperparameters as CSH
+
+X, y = load_iris(return_X_y=True)
+clf = RandomForestClassifier(n_estimators=10, random_state=2)  
+kf = KFold(shuffle=True, random_state=1)
+
+param_distributions = CS.ConfigurationSpace(seed=1111)
+param_distributions.add_hyperparameter(CSH.UniformIntegerHyperparameter("min_samples_split", 2, 11))
+param_distributions.add_hyperparameter(CSH.UniformIntegerHyperparameter("max_depth", 2, 4))
+
+##### test resource_name='n_estimators'
+
+search = HpBandSterSearchCV(clf, param_distributions, resource_name='n_estimators', min_budget=10, max_budget=80,
+                            cv=kf, random_state=2, warm_start=False,refit=True,
+                            n_iter=4, **{'eta':2}).fit(X, y)
+
+# if cross_val_score is equal to mean_test_score with same kf and same params
+# The search process and the test process have same results.
+best_score = -1
+best_params = -1 
+best_index = -1
+idx = 0
+for p, s, c in zip(search.cv_results_['params'], search.cv_results_['n_resources'], search.cv_results_['mean_test_score']):
+    clf = clf.set_params(**p)
+    test_score = np.mean(cross_val_score(clf , X, y, cv=kf))
+    if test_score > best_score:
+        best_score = test_score
+        best_params = p
+        best_index = idx
+    idx += 1
+    if test_score-c != 0:
+        print('The search process and the test process have different results, there are something wrong')
+print(search.best_score_, np.mean(cross_val_score(search.best_estimator_ , X, y, cv=kf)), best_score)
+print(search.best_params_, best_params)
+print(search.best_index_, best_index)
+
+##### test resource_name='n_samples'
+max_budget=1
+search = HpBandSterSearchCV(clf, param_distributions, resource_name='n_samples', min_budget=0.1, max_budget=max_budget,
+                            cv=kf, random_state=2, warm_start=False,refit=True,
+                            n_iter=4, **{'eta':2}).fit(X, y)
+
+# if cross_val_score is equal to mean_test_score with same kf and same params
+# The search process and the test process have same results.
+best_score = -1
+best_params = -1 
+best_index = -1
+idx = 0
+for p, s, c in zip(search.cv_results_['params'], search.cv_results_['n_resources'], search.cv_results_['mean_test_score']):
+    if s == len(X)*max_budget:
+        clf = clf.set_params(**p)
+        test_score = np.mean(cross_val_score(clf , X, y, cv=kf))
+        if test_score > best_score:
+            best_score = test_score
+            best_params = p
+            best_index = idx
+        if test_score-c != 0:
+            print('The search process and the test process have different results, there are something wrong')
+    idx += 1
+print(search.best_score_, np.mean(cross_val_score(search.best_estimator_ , X, y, cv=kf)), best_score)
+print(search.best_params_, best_params)
+print(search.best_index_, best_index)
+
+```
+
 ## Documentation
 
 https://hpbandster-sklearn.readthedocs.io/en/latest/
