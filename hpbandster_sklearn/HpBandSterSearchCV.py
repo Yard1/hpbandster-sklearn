@@ -390,9 +390,15 @@ class HpBandSterSearchCV(BaseSearchCV):
         config_ids = []
 
         for run in runs:
-            all_candidate_params.append(id2config[run.config_id]["config"])
+            # if resource_name != 'n_samples', resources is the hyperparameter of estimator.
+            # so directly add resources to params dict here 
+#             all_candidate_params.append(id2config[run.config_id]["config"])
+            candidate_params = id2config[run.config_id]["config"]
+            if self.resource_name_ != 'n_samples':
+                candidate_params.update({self.resource_name_:run.info["resources"][1]})
+            all_candidate_params.append(candidate_params.copy())
+            
             all_out.extend(run.info["cv"])
-
             resources.append(run.info["resources"][1])
             iteration.append(n_resources.index(run.info["resources"][2]))
             config_ids.append(run.config_id[-1])
@@ -406,8 +412,11 @@ class HpBandSterSearchCV(BaseSearchCV):
 
         # multimetric is determined here because in the case of a callable
         # self.scoring the return type is only known after calling
+        # scoring only supports single metric, so comment out the parts of multimetric for later processing 
         first_test_score = all_out[0]["test_scores"]
-        self.multimetric_ = isinstance(first_test_score, dict)
+#         self.multimetric_ = isinstance(first_test_score, dict)
+        # Experiments show that when single-metric, first_test_score is also a dictionary, but the length=1
+        self.multimetric_ = len(first_test_score)>1
 
         refit_metric = None
 
@@ -574,7 +583,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         id2config = self._res.get_id2config_mapping()
         incumbent = self._res.get_incumbent_id()
         runs_all = self._res.get_all_runs()
-        self.best_params_ = id2config[incumbent]["config"]
+#         self.best_params_ = id2config[incumbent]["config"]
 
         resource_type = workers[0].resource_type
         self.n_resources_ = [resource_type(x) for x in optimizer.budgets]
@@ -596,21 +605,35 @@ class HpBandSterSearchCV(BaseSearchCV):
         # For multi-metric evaluation, store the best_index_, best_params_ and
         # best_score_ iff refit is one of the scorer names
         # In single metric evaluation, refit_metric is "score"
-        if self.refit or not self.multimetric_:
-            # If callable, refit is expected to return the index of the best
-            # parameter set.
-            if callable(self.refit):
-                self.best_index_ = self.refit(results)
-                if not isinstance(self.best_index_, numbers.Integral):
-                    raise TypeError("best_index_ returned is not an integer")
-                if self.best_index_ < 0 or self.best_index_ >= len(results["params"]):
-                    raise IndexError("best_index_ index out of range")
-            else:
-                self.best_index_ = results["rank_test_%s" % refit_metric].argmin()
-                self.best_score_ = results["mean_test_%s" % refit_metric][
-                    self.best_index_
-                ]
-            self.best_params_ = results["params"][self.best_index_]
+        if self.resource_name_ == "n_samples":
+            # adapted from sklearn.model_selection._search_successive_halving line 209 _select_best_index()
+            last_iter = np.max(results["iter"])
+            last_iter_indices = np.flatnonzero(results["iter"] == last_iter)
+            best_idx = results["rank_test_%s" % refit_metric][last_iter_indices].argmin()
+            self.best_index_ = last_iter_indices[best_idx]
+        else:
+            self.best_index_ = results["rank_test_%s" % refit_metric].argmin()
+            
+        self.best_score_ = results["mean_test_%s" % refit_metric][self.best_index_]
+        self.best_params_ = results["params"][self.best_index_]
+            
+        # The above codes are applicable to single metric, multi-metric, refit=False and refit=True
+        # so, the following code is commented
+#         if self.refit or not self.multimetric_:
+#             # If callable, refit is expected to return the index of the best
+#             # parameter set.
+#             if callable(self.refit):
+#                 self.best_index_ = self.refit(results)
+#                 if not isinstance(self.best_index_, numbers.Integral):
+#                     raise TypeError("best_index_ returned is not an integer")
+#                 if self.best_index_ < 0 or self.best_index_ >= len(results["params"]):
+#                     raise IndexError("best_index_ index out of range")
+#             else:
+#                 self.best_index_ = results["rank_test_%s" % refit_metric].argmin()
+#                 self.best_score_ = results["mean_test_%s" % refit_metric][
+#                     self.best_index_
+#                 ]
+#             self.best_params_ = results["params"][self.best_index_]
 
         _logger.info(
             f"\nBest {refit_metric}: {self._res.get_runs_by_id(incumbent)[-1].info['test_score_mean']}"
@@ -630,8 +653,9 @@ class HpBandSterSearchCV(BaseSearchCV):
             # we clone again after setting params in case some
             # of the params are estimators as well.
             refit_params = self.best_params_.copy()
-            if self.resource_name_ != "n_samples":
-                refit_params[self.resource_name_] = results["n_resources"][self.best_index_]
+            # This situation has been considered in the function _runs_to_results() , so the following code has been commented out
+#             if self.resource_name_ != "n_samples":
+#                 refit_params[self.resource_name_] = results["n_resources"][self.best_index_]
             self.best_estimator_ = clone(
                 clone(base_estimator).set_params(**refit_params)
             )
