@@ -96,7 +96,7 @@ By default, the object will try to automatically determine the best resource, by
 
 Furthermore, special support has been added for `LightGBM`, `XGBoost` and `CatBoost` `scikit-learn` estimators.
 
-## Toolkit testing
+## Toolkit testing code
 
 ```python
 # -*- coding: utf-8 -*-
