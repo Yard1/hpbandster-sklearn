@@ -72,3 +72,86 @@ def test_CS():
     ).fit(X, y)
     assert isinstance(search.best_estimator_, RandomForestClassifier)
     check_is_fitted(search.best_estimator_)
+
+
+def test_resource_name():
+    """
+    Created on Sun Oct  9 21:43:41 2022
+
+    @author: poetair
+    """
+    import numpy as np
+    from sklearn.datasets import load_iris
+    from sklearn.ensemble import RandomForestClassifier
+    from hpbandster_sklearn import HpBandSterSearchCV
+    from sklearn.model_selection import KFold, cross_val_score
+
+    import ConfigSpace as CS
+    import ConfigSpace.hyperparameters as CSH
+
+    X, y = load_iris(return_X_y=True)
+    clf = RandomForestClassifier(n_estimators=10, random_state=2)
+    kf = KFold(shuffle=True, random_state=1)
+
+    param_distributions = CS.ConfigurationSpace(seed=1111)
+    param_distributions.add_hyperparameter(
+        CSH.UniformIntegerHyperparameter("min_samples_split", 2, 11)
+    )
+    param_distributions.add_hyperparameter(
+        CSH.UniformIntegerHyperparameter("max_depth", 2, 4)
+    )
+
+    ##### test resource_name='n_estimators'
+
+    search = HpBandSterSearchCV(
+        clf,
+        param_distributions,
+        resource_name="n_estimators",
+        min_budget=10,
+        max_budget=80,
+        cv=kf,
+        random_state=2,
+        warm_start=False,
+        refit=True,
+        n_iter=4,
+        **{"eta": 2}
+    ).fit(X, y)
+
+    # if cross_val_score is equal to mean_test_score with same kf and same params
+    # The search process and the test process have same results.
+    for p, s, c in zip(
+        search.cv_results_["params"],
+        search.cv_results_["n_resources"],
+        search.cv_results_["mean_test_score"],
+    ):
+        clf = clf.set_params(**p)
+        test_score = np.mean(cross_val_score(clf, X, y, cv=kf))
+        assert test_score - c == 0
+
+    ##### test resource_name='n_samples'
+    max_budget = 1
+    search = HpBandSterSearchCV(
+        clf,
+        param_distributions,
+        resource_name="n_samples",
+        min_budget=0.1,
+        max_budget=max_budget,
+        cv=kf,
+        random_state=2,
+        warm_start=False,
+        refit=True,
+        n_iter=4,
+        **{"eta": 2}
+    ).fit(X, y)
+
+    # if cross_val_score is equal to mean_test_score with same kf and same params
+    # The search process and the test process have same results.
+    for p, s, c in zip(
+        search.cv_results_["params"],
+        search.cv_results_["n_resources"],
+        search.cv_results_["mean_test_score"],
+    ):
+        if s == len(X) * max_budget:
+            clf = clf.set_params(**p)
+            test_score = np.mean(cross_val_score(clf, X, y, cv=kf))
+            assert test_score - c == 0
