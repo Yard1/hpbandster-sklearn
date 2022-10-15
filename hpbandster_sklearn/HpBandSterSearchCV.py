@@ -135,7 +135,7 @@ class HpBandSterSearchCV(BaseSearchCV):
         A single string (see `scoring_parameter`) or a callable
         (see `scoring`) to evaluate the predictions on the test set.
         If None, the estimator's score method is used.
-    
+
     warm_start : bool, default=True
         if estimator has attribute of 'warm_start' and 'warm_start'=True,
         the fitting process will reuse the solution of the previous call to fit
@@ -391,18 +391,18 @@ class HpBandSterSearchCV(BaseSearchCV):
 
         for run in runs:
             # if resource_name != 'n_samples', resources is the hyperparameter of estimator.
-            # so directly add resources to params dict here 
-#             all_candidate_params.append(id2config[run.config_id]["config"])
+            # so directly add resources to params dict here
+            #             all_candidate_params.append(id2config[run.config_id]["config"])
             candidate_params = id2config[run.config_id]["config"]
-            if self.resource_name_ != 'n_samples':
-                candidate_params.update({self.resource_name_:run.info["resources"][1]})
+            if self.resource_name_ != "n_samples":
+                candidate_params.update({self.resource_name_: run.info["resources"][1]})
             all_candidate_params.append(candidate_params.copy())
-            
+
             all_out.extend(run.info["cv"])
             resources.append(run.info["resources"][1])
             iteration.append(n_resources.index(run.info["resources"][2]))
             config_ids.append(run.config_id[-1])
-        #print(all_out)
+        # print(all_out)
         results = list(
             self._format_results(all_candidate_params, n_splits, all_out).items()
         )
@@ -412,10 +412,10 @@ class HpBandSterSearchCV(BaseSearchCV):
 
         # multimetric is determined here because in the case of a callable
         # self.scoring the return type is only known after calling
-        # scoring only supports single metric, so comment out the parts of multimetric for later processing 
+        # scoring only supports single metric, so comment out the parts of multimetric for later processing
         first_test_score = all_out[0]["test_scores"]
         # When single-metric, first_test_score is also a dictionary of length=1
-        self.multimetric_ = len(first_test_score)>1
+        self.multimetric_ = len(first_test_score) > 1
 
         refit_metric = None
 
@@ -576,7 +576,10 @@ class HpBandSterSearchCV(BaseSearchCV):
                     logger=_logger,
                     **self.bohb_kwargs,
                 )
-            with OptimizerContext(optimizer, n_iterations=actual_iterations,) as res:
+            with OptimizerContext(
+                optimizer,
+                n_iterations=actual_iterations,
+            ) as res:
                 self._res = res
 
         id2config = self._res.get_id2config_mapping()
@@ -607,11 +610,13 @@ class HpBandSterSearchCV(BaseSearchCV):
             # adapted from sklearn.model_selection._search_successive_halving::_select_best_index()
             last_iter = np.max(results["iter"])
             last_iter_indices = np.flatnonzero(results["iter"] == last_iter)
-            best_idx = results["rank_test_%s" % refit_metric][last_iter_indices].argmin()
+            best_idx = results["rank_test_%s" % refit_metric][
+                last_iter_indices
+            ].argmin()
             self.best_index_ = last_iter_indices[best_idx]
         else:
             self.best_index_ = results["rank_test_%s" % refit_metric].argmin()
-            
+
         self.best_score_ = results["mean_test_%s" % refit_metric][self.best_index_]
         self.best_params_ = results["params"][self.best_index_]
 
